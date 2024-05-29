@@ -1,0 +1,213 @@
+// -- Neil Choromokos <nchoro25@iastate.edu> -- //
+/ - X0:X7 Argument Registers    not preserved
+/ - X9:X15 temporary Registers  not preserved
+/ - X19:X27 Saved Registers     preserved
+// -- Main -- //
+
+/ Initialize Array, insert params
+ADD X19, XZR, XZR       / x9 = 0x0000 = &A
+ADD X0, X19, XZR        / x0 = &a param
+ADDI X1, XZR, #512      / x1 = n = 512
+
+BL fill
+
+/ insert params
+ADD X0, X19, XZR        / x0 = *a
+ADDI X1, XZR, #512      / x1 = n = 512
+BL sort
+
+/ insert params - search 1  a, 0, n-1, 0
+ADD X0, X19, XZR        / x0 = *a
+ADD X1, XZR, XZR        / x1 = 0
+ADDI X2, XZR, #511      / x2 = n-1 = 511
+ADD X3, XZR, XZR        / x3 = 0
+BL search
+PRNT X0
+
+/ insert params - search 2  a, 0, n-1, n-1
+ADD X0, X19, XZR        / x0 = *a
+ADD X1, XZR, XZR        / x1 = 0
+ADDI X2, XZR, #511      / x2 = n-1 = 511
+ADDI X3, XZR, #511      / x2 = n-1 = 511
+BL search
+PRNT X0
+
+/ insert params - search 3  a, 0, n-1, n/2
+ADD X0, X19, XZR        / x0 = *a
+ADD X1, XZR, XZR        / x1 = 0
+ADDI X2, XZR, #511      / x2 = n-1 = 511
+ADDI X3, XZR, #255      / x2 = n-1/2 = 255
+BL search
+PRNT X0
+
+/ insert params - search 4 a, 0, n-1, n
+ADD X0, X19, XZR        / x0 = *a
+ADD X1, XZR, XZR        / x1 = 0
+ADDI X2, XZR, #511      / x2 = n-1 = 511
+ADDI X3, XZR, #512      / x2 = n = 512
+BL search
+PRNT X0
+
+B Exit
+
+// ------------------ Fill ------------------ //
+    / x0 -> array base address
+    / x1 -> n (num elements)
+fill: 
+    ADD X9, XZR, XZR            / i = 0
+        floop:
+        SUB X10, X9, X1         / i < n
+        CBZ X10, fxit           / i = n , end 
+
+        / a[i] = n - i - 1
+        LSL X11, X9, #3         // x11 = i * 8
+        ADD X11, X0, X11        // x11 = a[i]
+
+        SUB X12, X1, X9         // x12 = n - i
+        SUBI X12, X12, #1       // x12 = n - i - 1
+        STUR X12, [X11, #0]     // a[i] = n - i - 1
+        ADDI X9, X9, #1         // i++
+        B floop
+    fxit:
+        BR LR
+
+
+// --------------- insertion_sort --------------- //
+    / X0 -> *a 
+    / x1 -> n num elements
+sort:
+    SUBI SP, SP, #32     
+    STUR X20, [SP, #24]          / reserved register
+    STUR X21, [SP, #16]           / reserved register
+    STUR LR, [SP, #8]           / need to branch back to main after nested procedures
+    STUR X1, [SP, #0]           / shift & insert needs x1
+
+    ADDI X20, X20, #1           / i = 1
+    ADD X21, XZR, XZR           / value = 0
+        sloop:
+            LDUR X1, [SP, #0]       / restore param for comparison
+            SUB X9, X20, X1         / i < n
+            CBZ X9, sxit            / i = n , end 
+
+            LSL X9, X20, #3         / x11 = i * 8
+            ADD X9, X0, X9          / x11 = &a[i]
+            LDUR X21, [X9, #0]      / x10 = a[i] 
+            ADD X1, X20, XZR        / x1 = i 
+            BL shift                / x2 now contains 3rd var for insert
+            ADD X1, X21, XZR        / x1 = value
+            BL insert
+            ADDI X20, X20, #1     // i++
+            B sloop
+    sxit:
+        LDUR LR, [SP, #8]
+        LDUR X21, [SP, #16]
+        LDUR X20, [SP, #24]
+        ADDI SP, SP, #32
+        BR LR
+
+// -- nested procedures -- //
+    / x0 -> *a 
+    / x1 -> where
+    / x2 -> what
+insert:  /save x1, LR 
+    LSL X2, X2, #3      / shift index
+    ADD X2, X2, X0      / x1 = a[where]
+    STUR X1, [X2, #0]   / a[where] = what
+    BR LR               / return
+
+    / x0 -> *a 
+    / x1 -> end
+shift:
+    SUBI SP, SP, #24         / save return
+    STUR X22, [SP, #16]
+    STUR X23, [SP, #8]
+    STUR LR, [SP, #0]
+
+    ADD X22, XZR, XZR       / i = 0
+    ADD X23, XZR, XZR       / tmp = 0
+
+    SUBI X22, X1, #1    / i = end - 1
+    LSL X9, X1, #3      / x9 = end * 8
+    ADD X9, X0, X9      / x9 = &a[end]
+    LDUR X23, [X9, #0]  / tmp = a[end]
+
+    shloop:
+        / i > -1 && a[i] > tmp 
+        SUBIS X9, X22, #-1
+        B.LE shxit           / i is negative
+        LSL X9, X22, #3     / i * 8
+        ADD X9, X0, X9      / x9 = &a[i]
+        LDUR X10, [X9, #0]  / x10 = a[i]
+        SUBS X12, X10, X23
+        B.LE shxit           / a[i] < tmp, exit
+
+        ADDI X11, X22, #1   / x11 = i + 1 
+        LSL X11, X11, #3    / x11 = i * 8
+        ADD X11, X0, X11    / x11 = &a[i + 1]  
+        STUR X10, [X11, #0] 
+
+        SUBI X22, X22, #1   / i--
+        B shloop
+    shxit:
+        / return i + 1
+        ADDI X2, X22, #1
+        LDUR LR, [SP, #0]
+        LDUR X23, [SP, #8]
+        LDUR X22, [SP, #16]
+        ADDI SP, SP, #24
+        BR LR
+
+// --------------- binary_search --------------- //
+    / x0 -> *a 
+    / x1 -> start 
+    / x2 -> end
+    / x3 -> value 
+search:
+    SUBI SP, SP, #8         / save x24 
+    STUR X24, [SP, #0]
+    ADD X24, XZR, XZR       / m = 0
+
+    / while (start <= end)
+    bloop:
+        SUBS X9, X1, X2 
+        B.GT bxit           / start > end, end
+
+        ADDI X13, XZR, #2
+        ADD X9, X1, X2      / x9 = end + start
+        ADDI X9, X9, #1     / x9 = (end + start) + 1
+        SDIV X24, X9, X13    / m = ((end+start)+1)/2
+
+        LSL X9, X24, #3     / m * 8
+        ADD X9, X0, X9      / x9 = &a[m]
+        LDUR X10, [X9, #0]  / x10 = a[m]
+        SUBS X11, X10, X3  / a[m] == value
+        CBZ X11, bxit1
+
+        / if (value > a[m]), start = m + 1
+        / else, end = m - 1
+
+        SUBS X11, X10, X3   / a[m] - value 
+        B.GE else           / a[m] > value, else
+
+        ADDI X1, X24, #1    / start = m + 1
+        B ifexit
+
+        else: 
+            SUBI X2, X24, #1    / end = m - 1
+        ifexit:
+            B bloop
+
+    bxit1:
+        ADD X0, X24, XZR    / return m
+        LDUR X24, [SP, #0]
+        ADDI SP, SP, #8
+        BR LR
+    bxit:
+        ADDI X0, XZR, #-1    / return m
+        LDUR X24, [SP, #0]
+        ADDI SP, SP, #8
+        BR LR
+    
+
+Exit:
+DUMP
