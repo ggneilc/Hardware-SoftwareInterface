@@ -6,7 +6,7 @@ This class followed the text Hardware-Software Interface, Intro to Assembly ARM 
 
 ## Insertion Sort
 
-We were tasked with creating a version of insertion sort that was split into multiple different functions into legv8 assembly. All instruction types were used and earned perfect score.
+Tasked with creating a version of insertion sort that was split into multiple different functions into legv8 assembly (C code for the insertion sort found in cs321_insertion_sort.c.) The code runs on the legv8emulator and correctly initializes the heap & stack, then sorts with insertion sort, and finally performs multiple interations of a binary search to ensure sort correctness. Earned perfect score.
 
 ## Binary Disassembler
 
